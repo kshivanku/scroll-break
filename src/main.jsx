@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StrictMode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -9,6 +9,7 @@ const MOVE_LOCK_MS = 620;
 const WHEEL_THRESHOLD = 52;
 const WHEEL_GESTURE_RESET_MS = 520;
 const TRANSITION_MS = 520;
+const MIN_READER_FONT_SIZE = 8;
 
 function loadSavedState() {
   try {
@@ -70,8 +71,13 @@ function App() {
   const wheelGestureActive = useRef(false);
   const wheelResetTimer = useRef(null);
   const isTransitioning = useRef(false);
+  const lineStageRef = useRef(null);
+  const measureRef = useRef(null);
+  const [fitFontSize, setFitFontSize] = useState(fontSize);
+  const [viewportTick, setViewportTick] = useState(0);
   const lines = useMemo(() => splitTextIntoSentences(text), [text]);
   const currentIndex = clamp(index, 0, Math.max(lines.length - 1, 0));
+  const currentLine = lines[currentIndex] || "";
   const canRead = lines.length > 0;
 
   useEffect(() => {
@@ -97,6 +103,81 @@ function App() {
       window.clearTimeout(wheelResetTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    function handleResize() {
+      setViewportTick((value) => value + 1);
+    }
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (mode !== "read") {
+      setFitFontSize(fontSize);
+      return;
+    }
+
+    const stage = lineStageRef.current;
+    const measure = measureRef.current;
+
+    if (!stage || !measure) {
+      return;
+    }
+
+    const stageStyle = window.getComputedStyle(stage);
+    const availableWidth = Math.max(
+      1,
+      stage.clientWidth - parseFloat(stageStyle.paddingLeft) - parseFloat(stageStyle.paddingRight),
+    );
+    const availableHeight = Math.max(
+      1,
+      stage.clientHeight - parseFloat(stageStyle.paddingTop) - parseFloat(stageStyle.paddingBottom),
+    );
+    const measureWidth = Math.max(1, Math.min(availableWidth, 1080));
+    const textsToFit = [currentLine, outgoingSentence].filter((sentence) => sentence);
+
+    if (textsToFit.length === 0) {
+      setFitFontSize(fontSize);
+      return;
+    }
+
+    measure.style.width = `${measureWidth}px`;
+
+    function fits(size) {
+      measure.style.fontSize = `${size}px`;
+
+      return textsToFit.every((sentence) => {
+        measure.textContent = sentence;
+        return measure.scrollWidth <= measureWidth + 1 && measure.scrollHeight <= availableHeight + 1;
+      });
+    }
+
+    let low = MIN_READER_FONT_SIZE;
+    let high = fontSize;
+
+    if (fits(high)) {
+      setFitFontSize(high);
+      return;
+    }
+
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+
+      if (fits(mid)) {
+        low = mid;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    setFitFontSize(low);
+  }, [animationId, currentLine, fontSize, mode, outgoingSentence, viewportTick]);
 
   const move = useCallback(
     (step) => {
@@ -215,7 +296,6 @@ function App() {
   }
 
   if (mode === "read") {
-    const currentLine = lines[currentIndex] || "";
     const progress = lines.length ? ((currentIndex + 1) / lines.length) * 100 : 0;
 
     return (
@@ -238,12 +318,12 @@ function App() {
           </button>
         </div>
 
-        <section className="line-stage" aria-live="polite">
+        <section ref={lineStageRef} className="line-stage" aria-live="polite">
           {outgoingSentence !== null && (
             <p
               key={`out-${animationId}`}
               className={`sentence sentence-out ${direction} ${outgoingSentence ? "" : "sentence-break"}`}
-              style={{ fontSize: `${fontSize}px` }}
+              style={{ fontSize: `${fitFontSize}px` }}
             >
               {outgoingSentence || " "}
             </p>
@@ -251,10 +331,11 @@ function App() {
           <p
             key={`in-${animationId}`}
             className={`sentence sentence-in ${direction} ${currentLine ? "" : "sentence-break"}`}
-            style={{ fontSize: `${fontSize}px` }}
+            style={{ fontSize: `${fitFontSize}px` }}
           >
             {currentLine || " "}
           </p>
+          <p ref={measureRef} className="sentence-measure" aria-hidden="true" />
         </section>
 
         <div className="reader-footer">
