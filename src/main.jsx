@@ -5,9 +5,9 @@ import "./styles.css";
 const STORAGE_KEY = "scroll-break-state";
 const DEFAULT_TEXT =
   "Paste something longer than your patience.\n\nThen read it one small motion at a time.";
-const MOVE_LOCK_MS = 620;
-const WHEEL_THRESHOLD = 52;
-const WHEEL_GESTURE_RESET_MS = 520;
+const MOVE_LOCK_MS = 540;
+const WHEEL_THRESHOLD = 8;
+const WHEEL_GESTURE_RESET_MS = 160;
 const TRANSITION_MS = 520;
 const MIN_READER_FONT_SIZE = 8;
 const WORD_START_DELAY_MS = 280;
@@ -55,6 +55,18 @@ function splitTextIntoSentences(text) {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function normalizeWheelDelta(event) {
+  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+    return event.deltaY * 18;
+  }
+
+  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+    return event.deltaY * window.innerHeight;
+  }
+
+  return event.deltaY;
 }
 
 function tokenizeSentence(sentence) {
@@ -123,7 +135,7 @@ function App() {
   const transitionTimer = useRef(null);
   const wordTimers = useRef([]);
   const wheelDelta = useRef(0);
-  const wheelGestureActive = useRef(false);
+  const wheelGestureConsumed = useRef(false);
   const wheelResetTimer = useRef(null);
   const isTransitioning = useRef(false);
   const lineStageRef = useRef(null);
@@ -279,37 +291,36 @@ function App() {
   const move = useCallback(
     (step) => {
       if (mode !== "read" || lines.length === 0 || isTransitioning.current) {
-        return;
+        return false;
       }
 
       const now = Date.now();
       if (now - lastMoveAt.current < MOVE_LOCK_MS) {
-        return;
+        return false;
       }
 
-      setIndex((value) => {
-        const nextIndex = clamp(value + step, 0, lines.length - 1);
+      const nextIndex = clamp(currentIndex + step, 0, lines.length - 1);
 
-        if (nextIndex === value) {
-          return value;
-        }
+      if (nextIndex === currentIndex) {
+        return false;
+      }
 
-        window.clearTimeout(transitionTimer.current);
-        lastMoveAt.current = now;
-        isTransitioning.current = true;
-        setOutgoingSentence(lines[value] || "");
-        setDirection(step > 0 ? "next" : "prev");
-        setAnimationId((id) => id + 1);
+      window.clearTimeout(transitionTimer.current);
+      lastMoveAt.current = now;
+      isTransitioning.current = true;
+      setOutgoingSentence(lines[currentIndex] || "");
+      setDirection(step > 0 ? "next" : "prev");
+      setAnimationId((id) => id + 1);
+      setIndex(nextIndex);
 
-        transitionTimer.current = window.setTimeout(() => {
-          setOutgoingSentence(null);
-          isTransitioning.current = false;
-        }, TRANSITION_MS);
+      transitionTimer.current = window.setTimeout(() => {
+        setOutgoingSentence(null);
+        isTransitioning.current = false;
+      }, TRANSITION_MS);
 
-        return nextIndex;
-      });
+      return true;
     },
-    [lines, mode],
+    [currentIndex, lines, mode],
   );
 
   useEffect(() => {
@@ -344,17 +355,27 @@ function App() {
       }
 
       event.preventDefault();
-      wheelDelta.current += event.deltaY;
       window.clearTimeout(wheelResetTimer.current);
 
       wheelResetTimer.current = window.setTimeout(() => {
         wheelDelta.current = 0;
-        wheelGestureActive.current = false;
+        wheelGestureConsumed.current = false;
       }, WHEEL_GESTURE_RESET_MS);
 
-      if (!wheelGestureActive.current && Math.abs(wheelDelta.current) > WHEEL_THRESHOLD) {
-        wheelGestureActive.current = true;
-        move(event.deltaY > 0 ? 1 : -1);
+      if (wheelGestureConsumed.current || isTransitioning.current) {
+        return;
+      }
+
+      wheelDelta.current += normalizeWheelDelta(event);
+
+      if (Math.abs(wheelDelta.current) >= WHEEL_THRESHOLD) {
+        const step = wheelDelta.current > 0 ? 1 : -1;
+        const didMove = move(step);
+
+        if (didMove) {
+          wheelDelta.current = 0;
+          wheelGestureConsumed.current = true;
+        }
       }
     }
 
@@ -367,7 +388,6 @@ function App() {
       return;
     }
 
-    setIndex(0);
     setDirection("idle");
     setOutgoingSentence(null);
     setActiveWordIndex(null);
