@@ -130,10 +130,12 @@ function App() {
   const [outgoingSentence, setOutgoingSentence] = useState(null);
   const [animationId, setAnimationId] = useState(0);
   const [activeWordIndex, setActiveWordIndex] = useState(null);
+  const activeWordIndexRef = useRef(null);
   const lastMoveAt = useRef(0);
   const touchStartY = useRef(null);
   const transitionTimer = useRef(null);
   const wordTimers = useRef([]);
+  const isRhythmPaused = useRef(false);
   const wheelDelta = useRef(0);
   const wheelGestureConsumed = useRef(false);
   const wheelResetTimer = useRef(null);
@@ -177,8 +179,56 @@ function App() {
   }, []);
 
   useEffect(() => {
+    activeWordIndexRef.current = activeWordIndex;
+  }, [activeWordIndex]);
+
+  const clearWordTimers = useCallback(() => {
     wordTimers.current.forEach((timer) => window.clearTimeout(timer));
     wordTimers.current = [];
+  }, []);
+
+  const scheduleWordRhythm = useCallback(
+    (startWordIndex, firstDelay) => {
+      clearWordTimers();
+
+      if (mode !== "read" || !currentLine || currentWordCount === 0) {
+        setActiveWordIndex(-1);
+        return;
+      }
+
+      if (isRhythmPaused.current) {
+        return;
+      }
+
+      if (startWordIndex >= currentWordCount) {
+        const completeTimer = window.setTimeout(() => {
+          setActiveWordIndex(-1);
+        }, WORD_END_HOLD_MS);
+
+        wordTimers.current.push(completeTimer);
+        return;
+      }
+
+      for (let wordIndex = startWordIndex; wordIndex < currentWordCount; wordIndex += 1) {
+        const delay = firstDelay + (wordIndex - startWordIndex) * WORD_INTERVAL_MS;
+        const timer = window.setTimeout(() => {
+          setActiveWordIndex(wordIndex);
+        }, delay);
+
+        wordTimers.current.push(timer);
+      }
+
+      const completeTimer = window.setTimeout(() => {
+        setActiveWordIndex(-1);
+      }, firstDelay + (currentWordCount - startWordIndex) * WORD_INTERVAL_MS + WORD_END_HOLD_MS);
+
+      wordTimers.current.push(completeTimer);
+    },
+    [clearWordTimers, currentLine, currentWordCount, mode],
+  );
+
+  useEffect(() => {
+    clearWordTimers();
 
     if (mode !== "read" || !currentLine || currentWordCount === 0) {
       setActiveWordIndex(-1);
@@ -186,32 +236,12 @@ function App() {
     }
 
     setActiveWordIndex(null);
-
-    const startTimer = window.setTimeout(() => {
-      setActiveWordIndex(0);
-    }, WORD_START_DELAY_MS);
-
-    wordTimers.current.push(startTimer);
-
-    for (let wordIndex = 1; wordIndex < currentWordCount; wordIndex += 1) {
-      const timer = window.setTimeout(() => {
-        setActiveWordIndex(wordIndex);
-      }, WORD_START_DELAY_MS + wordIndex * WORD_INTERVAL_MS);
-
-      wordTimers.current.push(timer);
-    }
-
-    const completeTimer = window.setTimeout(() => {
-      setActiveWordIndex(-1);
-    }, WORD_START_DELAY_MS + currentWordCount * WORD_INTERVAL_MS + WORD_END_HOLD_MS);
-
-    wordTimers.current.push(completeTimer);
+    scheduleWordRhythm(0, WORD_START_DELAY_MS);
 
     return () => {
-      wordTimers.current.forEach((timer) => window.clearTimeout(timer));
-      wordTimers.current = [];
+      clearWordTimers();
     };
-  }, [animationId, currentLine, currentWordCount, mode]);
+  }, [animationId, clearWordTimers, currentLine, currentWordCount, mode, scheduleWordRhythm]);
 
   useEffect(() => {
     function handleResize() {
@@ -413,12 +443,40 @@ function App() {
     }
   }
 
+  function pauseWordRhythm() {
+    if (mode !== "read" || isRhythmPaused.current) {
+      return;
+    }
+
+    isRhythmPaused.current = true;
+    clearWordTimers();
+  }
+
+  function resumeWordRhythm() {
+    if (mode !== "read" || !isRhythmPaused.current) {
+      return;
+    }
+
+    isRhythmPaused.current = false;
+
+    if (!currentLine || currentWordCount === 0 || activeWordIndexRef.current === -1) {
+      return;
+    }
+
+    const nextWordIndex = activeWordIndexRef.current === null ? 0 : activeWordIndexRef.current + 1;
+    scheduleWordRhythm(nextWordIndex, activeWordIndexRef.current === null ? 120 : WORD_INTERVAL_MS);
+  }
+
   if (mode === "read") {
     const progress = lines.length ? ((currentIndex + 1) / lines.length) * 100 : 0;
 
     return (
       <main
         className="reader"
+        onPointerDown={pauseWordRhythm}
+        onPointerUp={resumeWordRhythm}
+        onPointerCancel={resumeWordRhythm}
+        onPointerLeave={resumeWordRhythm}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         aria-label="Reader"
