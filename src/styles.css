@@ -10,8 +10,7 @@
   --highlight: rgba(232, 79, 50, 0.28);
   --shadow: rgba(24, 18, 10, 0.1);
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+    "Source Serif 4", Georgia, "Times New Roman", serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -80,7 +79,7 @@ button {
   margin: 0;
   color: var(--accent);
   font-size: 0.84rem;
-  font-weight: 800;
+  font-weight: 400;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -89,6 +88,7 @@ h1 {
   margin: 0;
   max-width: 780px;
   font-size: clamp(2.8rem, 10vw, 6.8rem);
+  font-weight: 400;
   line-height: 0.92;
   letter-spacing: 0;
 }
@@ -104,7 +104,7 @@ h1 {
 .editor-label {
   color: var(--muted);
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 textarea {
@@ -141,7 +141,7 @@ textarea:focus {
   gap: 12px;
   color: var(--muted);
   font-size: 0.92rem;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 input[type="range"] {
@@ -170,7 +170,7 @@ input[type="range"] {
   padding: 0 16px;
   background: transparent;
   color: var(--muted);
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .segmented-control button.active {
@@ -190,7 +190,7 @@ input[type="range"] {
   background: var(--accent-strong);
   color: var(--background);
   font-size: 1rem;
-  font-weight: 900;
+  font-weight: 400;
 }
 
 .primary-button:disabled {
@@ -233,7 +233,7 @@ input[type="range"] {
   border-radius: 3px;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-  font-weight: 850;
+  font-weight: 400;
   transition:
     background-color 140ms linear,
     color 140ms linear,
@@ -274,7 +274,7 @@ input[type="range"] {
   overflow-wrap: anywhere;
   visibility: hidden;
   color: transparent;
-  font-weight: 850;
+  font-weight: 400;
   text-align: center;
   line-height: 1.18;
   letter-spacing: 0;
@@ -333,7 +333,7 @@ input[type="range"] {
   gap: 18px;
   color: var(--muted);
   font-size: 0.86rem;
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .progress-track {
