@@ -10,6 +10,9 @@ const WHEEL_THRESHOLD = 52;
 const WHEEL_GESTURE_RESET_MS = 520;
 const TRANSITION_MS = 520;
 const MIN_READER_FONT_SIZE = 8;
+const WORD_START_DELAY_MS = 280;
+const WORD_INTERVAL_MS = 285;
+const WORD_END_HOLD_MS = 360;
 
 function loadSavedState() {
   try {
@@ -54,6 +57,56 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+function tokenizeSentence(sentence) {
+  return sentence.match(/\s+|[^\s]+/g)?.map((token) => ({
+    text: token,
+    isWord: !/^\s+$/.test(token),
+  })) || [];
+}
+
+function SentenceText({ sentence, className, fontSize, wordIndex, rhythmEnabled }) {
+  if (!sentence) {
+    return (
+      <p className={`${className} sentence-break`} style={{ fontSize: `${fontSize}px` }}>
+        {" "}
+      </p>
+    );
+  }
+
+  let wordCursor = -1;
+  const isComplete = rhythmEnabled && wordIndex === -1;
+
+  return (
+    <p className={className} style={{ fontSize: `${fontSize}px` }}>
+      {tokenizeSentence(sentence).map((token, tokenIndex) => {
+        if (!token.isWord) {
+          return token.text;
+        }
+
+        wordCursor += 1;
+
+        const stateClass = rhythmEnabled
+          ? isComplete
+            ? "word-complete"
+            : wordIndex === null
+              ? "word-upcoming"
+              : wordCursor < wordIndex
+                ? "word-past"
+                : wordCursor === wordIndex
+                  ? "word-active"
+                  : "word-upcoming"
+          : "word-complete";
+
+        return (
+          <span className={`word ${stateClass}`} key={`${token.text}-${tokenIndex}`}>
+            {token.text}
+          </span>
+        );
+      })}
+    </p>
+  );
+}
+
 function App() {
   const savedState = useMemo(loadSavedState, []);
   const [text, setText] = useState(savedState?.text || DEFAULT_TEXT);
@@ -64,9 +117,11 @@ function App() {
   const [direction, setDirection] = useState("idle");
   const [outgoingSentence, setOutgoingSentence] = useState(null);
   const [animationId, setAnimationId] = useState(0);
+  const [activeWordIndex, setActiveWordIndex] = useState(null);
   const lastMoveAt = useRef(0);
   const touchStartY = useRef(null);
   const transitionTimer = useRef(null);
+  const wordTimers = useRef([]);
   const wheelDelta = useRef(0);
   const wheelGestureActive = useRef(false);
   const wheelResetTimer = useRef(null);
@@ -78,6 +133,10 @@ function App() {
   const lines = useMemo(() => splitTextIntoSentences(text), [text]);
   const currentIndex = clamp(index, 0, Math.max(lines.length - 1, 0));
   const currentLine = lines[currentIndex] || "";
+  const currentWordCount = useMemo(
+    () => tokenizeSentence(currentLine).filter((token) => token.isWord).length,
+    [currentLine],
+  );
   const canRead = lines.length > 0;
 
   useEffect(() => {
@@ -101,8 +160,46 @@ function App() {
     return () => {
       window.clearTimeout(transitionTimer.current);
       window.clearTimeout(wheelResetTimer.current);
+      wordTimers.current.forEach((timer) => window.clearTimeout(timer));
     };
   }, []);
+
+  useEffect(() => {
+    wordTimers.current.forEach((timer) => window.clearTimeout(timer));
+    wordTimers.current = [];
+
+    if (mode !== "read" || !currentLine || currentWordCount === 0) {
+      setActiveWordIndex(-1);
+      return;
+    }
+
+    setActiveWordIndex(null);
+
+    const startTimer = window.setTimeout(() => {
+      setActiveWordIndex(0);
+    }, WORD_START_DELAY_MS);
+
+    wordTimers.current.push(startTimer);
+
+    for (let wordIndex = 1; wordIndex < currentWordCount; wordIndex += 1) {
+      const timer = window.setTimeout(() => {
+        setActiveWordIndex(wordIndex);
+      }, WORD_START_DELAY_MS + wordIndex * WORD_INTERVAL_MS);
+
+      wordTimers.current.push(timer);
+    }
+
+    const completeTimer = window.setTimeout(() => {
+      setActiveWordIndex(-1);
+    }, WORD_START_DELAY_MS + currentWordCount * WORD_INTERVAL_MS + WORD_END_HOLD_MS);
+
+    wordTimers.current.push(completeTimer);
+
+    return () => {
+      wordTimers.current.forEach((timer) => window.clearTimeout(timer));
+      wordTimers.current = [];
+    };
+  }, [animationId, currentLine, currentWordCount, mode]);
 
   useEffect(() => {
     function handleResize() {
@@ -271,8 +368,9 @@ function App() {
     }
 
     setIndex(0);
-    setDirection("next");
+    setDirection("idle");
     setOutgoingSentence(null);
+    setActiveWordIndex(null);
     isTransitioning.current = false;
     setMode("read");
   }
@@ -320,21 +418,23 @@ function App() {
 
         <section ref={lineStageRef} className="line-stage" aria-live="polite">
           {outgoingSentence !== null && (
-            <p
+            <SentenceText
               key={`out-${animationId}`}
               className={`sentence sentence-out ${direction} ${outgoingSentence ? "" : "sentence-break"}`}
-              style={{ fontSize: `${fitFontSize}px` }}
-            >
-              {outgoingSentence || " "}
-            </p>
+              sentence={outgoingSentence}
+              fontSize={fitFontSize}
+              rhythmEnabled={false}
+              wordIndex={-1}
+            />
           )}
-          <p
+          <SentenceText
             key={`in-${animationId}`}
             className={`sentence sentence-in ${direction} ${currentLine ? "" : "sentence-break"}`}
-            style={{ fontSize: `${fitFontSize}px` }}
-          >
-            {currentLine || " "}
-          </p>
+            sentence={currentLine}
+            fontSize={fitFontSize}
+            rhythmEnabled
+            wordIndex={activeWordIndex}
+          />
           <p ref={measureRef} className="sentence-measure" aria-hidden="true" />
         </section>
 
