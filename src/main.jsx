@@ -822,7 +822,7 @@ function App() {
       <section className="compose-panel">
         <div className="compose-copy">
           <h1>
-            Take a scroll break
+            Take a scroll
           </h1>
         </div>
 
