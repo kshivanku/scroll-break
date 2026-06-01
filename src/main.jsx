@@ -735,7 +735,6 @@ function App() {
           <h1>
             Take a scroll break
           </h1>
-          <p>Paste a wall of words, then move through it one line at a time.</p>
         </div>
 
         <textarea
@@ -743,11 +742,11 @@ function App() {
           aria-label="Text to read"
           value={text}
           onChange={(event) => setText(event.target.value)}
-          placeholder="Paste your text here"
+          placeholder="Paste your text here, then scroll through it one line at a time."
         />
 
         <div className="action-row">
-          <p>{scrollDurationLabel}</p>
+          {text.trim() && <p>{scrollDurationLabel}</p>}
           <div className="compose-actions">
             <button className="secondary-button" type="button" onClick={clearText} disabled={!text}>
               Clear

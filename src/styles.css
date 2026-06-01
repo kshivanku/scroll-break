@@ -154,6 +154,7 @@ textarea:focus {
 .compose-actions {
   display: flex;
   gap: 10px;
+  margin-left: auto;
 }
 
 .primary-button {
