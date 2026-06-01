@@ -174,6 +174,18 @@ function App() {
   }, [currentIndex, index]);
 
   useEffect(() => {
+    if (mode !== "overview") {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector(`[data-overview-index="${currentIndex}"]`)
+        ?.scrollIntoView({ block: "center" });
+    });
+  }, [currentIndex, mode]);
+
+  useEffect(() => {
     return () => {
       window.clearTimeout(transitionTimer.current);
       window.clearTimeout(wheelResetTimer.current);
@@ -437,6 +449,25 @@ function App() {
     clearWordTimers();
   }
 
+  function openOverview() {
+    clearWordTimers();
+    setOutgoingSentence(null);
+    setDirection("idle");
+    setActiveWordIndex(null);
+    isTransitioning.current = false;
+    setMode("overview");
+  }
+
+  function startFromSentence(sentenceIndex) {
+    clearWordTimers();
+    setIndex(sentenceIndex);
+    setOutgoingSentence(null);
+    setDirection("idle");
+    setActiveWordIndex(null);
+    isTransitioning.current = false;
+    setMode("read");
+  }
+
   function handleTouchStart(event) {
     touchStartY.current = event.touches[0]?.clientY ?? null;
     touchStartAt.current = Date.now();
@@ -531,6 +562,9 @@ function App() {
           <button className="icon-button" type="button" onClick={() => setIndex(0)} aria-label="Restart">
             <span aria-hidden="true">↺</span>
           </button>
+          <button className="icon-button" type="button" onClick={openOverview} aria-label="Open text overview">
+            <span aria-hidden="true">☷</span>
+          </button>
         </div>
 
         <section ref={lineStageRef} className="line-stage" aria-live="polite">
@@ -562,6 +596,45 @@ function App() {
 
         <button className="tap-zone tap-prev" type="button" onClick={() => move(-1)} aria-label="Previous line" />
         <button className="tap-zone tap-next" type="button" onClick={() => move(1)} aria-label="Next line" />
+      </main>
+    );
+  }
+
+  if (mode === "overview") {
+    return (
+      <main className="overview" aria-label="Text overview">
+        {themeToggle}
+        <div className="reader-actions" aria-label="Overview controls">
+          <button className="icon-button" type="button" onClick={() => setMode("read")} aria-label="Back to reader">
+            <span aria-hidden="true">←</span>
+          </button>
+          <button className="icon-button" type="button" onClick={() => setMode("compose")} aria-label="Back to editor">
+            <span aria-hidden="true">✎</span>
+          </button>
+        </div>
+
+        <section className="overview-list">
+          {lines.map((line, sentenceIndex) =>
+            line ? (
+              <button
+                className={`overview-sentence ${sentenceIndex === currentIndex ? "active" : ""}`}
+                data-overview-index={sentenceIndex}
+                key={`${line}-${sentenceIndex}`}
+                type="button"
+                onClick={() => startFromSentence(sentenceIndex)}
+              >
+                {line}
+              </button>
+            ) : (
+              <div
+                className="overview-break"
+                data-overview-index={sentenceIndex}
+                key={`break-${sentenceIndex}`}
+                aria-hidden="true"
+              />
+            ),
+          )}
+        </section>
       </main>
     );
   }
