@@ -876,11 +876,13 @@ function App() {
               disabled={loadingPreloadedId !== null}
             >
               <img src={preloadedText.image} alt="" loading="lazy" aria-hidden="true" />
-              <span>{preloadedText.title}</span>
+              <span className="preloaded-copy">
+                <span>{preloadedText.title}</span>
+                <small>
+                  {loadingPreloadedId === preloadedText.id ? "Loading..." : preloadedText.description}
+                </small>
+              </span>
               <em>{formatScrollDuration(preloadedText.wordCount)}</em>
-              <small>
-                {loadingPreloadedId === preloadedText.id ? "Loading..." : preloadedText.description}
-              </small>
             </button>
           ))}
         </section>
