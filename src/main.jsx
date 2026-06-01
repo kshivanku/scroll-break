@@ -58,6 +58,20 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+function findReadableIndex(lines, startIndex, step) {
+  let nextIndex = clamp(startIndex + step, 0, Math.max(lines.length - 1, 0));
+
+  while (nextIndex >= 0 && nextIndex < lines.length && !lines[nextIndex]) {
+    nextIndex += step;
+  }
+
+  if (nextIndex < 0 || nextIndex >= lines.length) {
+    return startIndex;
+  }
+
+  return nextIndex;
+}
+
 function normalizeWheelDelta(event) {
   if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
     return event.deltaY * 18;
@@ -172,6 +186,20 @@ function App() {
       setIndex(currentIndex);
     }
   }, [currentIndex, index]);
+
+  useEffect(() => {
+    if (mode !== "read" || !lines.length || currentLine) {
+      return;
+    }
+
+    const nextReadableIndex = findReadableIndex(lines, currentIndex, 1);
+    const fallbackReadableIndex = findReadableIndex(lines, currentIndex, -1);
+    const readableIndex = nextReadableIndex !== currentIndex ? nextReadableIndex : fallbackReadableIndex;
+
+    if (readableIndex !== currentIndex) {
+      setIndex(readableIndex);
+    }
+  }, [currentIndex, currentLine, lines, mode]);
 
   useEffect(() => {
     if (mode !== "overview") {
@@ -344,7 +372,7 @@ function App() {
         return false;
       }
 
-      const nextIndex = clamp(currentIndex + step, 0, lines.length - 1);
+      const nextIndex = findReadableIndex(lines, currentIndex, step);
 
       if (nextIndex === currentIndex) {
         return false;
