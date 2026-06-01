@@ -3,16 +3,17 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 const STORAGE_KEY = "scroll-break-state";
-const DEFAULT_TEXT =
-  "Paste something longer than your patience.\n\nThen read it one small motion at a time.";
+const DEFAULT_TEXT = "";
 const MOVE_LOCK_MS = 540;
 const WHEEL_THRESHOLD = 8;
 const WHEEL_GESTURE_RESET_MS = 160;
 const TRANSITION_MS = 520;
 const MIN_READER_FONT_SIZE = 8;
+const READER_FONT_SIZE = 38;
 const WORD_START_DELAY_MS = 280;
 const WORD_INTERVAL_MS = 285;
 const WORD_END_HOLD_MS = 360;
+const HOLD_PAUSE_MS = 280;
 
 function loadSavedState() {
   try {
@@ -124,7 +125,6 @@ function App() {
   const [text, setText] = useState(savedState?.text || DEFAULT_TEXT);
   const [mode, setMode] = useState(savedState?.mode || "compose");
   const [index, setIndex] = useState(savedState?.index || 0);
-  const [fontSize, setFontSize] = useState(savedState?.fontSize || 38);
   const [theme, setTheme] = useState(savedState?.theme || "light");
   const [direction, setDirection] = useState("idle");
   const [outgoingSentence, setOutgoingSentence] = useState(null);
@@ -133,6 +133,9 @@ function App() {
   const activeWordIndexRef = useRef(null);
   const lastMoveAt = useRef(0);
   const touchStartY = useRef(null);
+  const touchStartAt = useRef(0);
+  const pressStartAt = useRef(0);
+  const suppressTouchNavigation = useRef(false);
   const transitionTimer = useRef(null);
   const wordTimers = useRef([]);
   const isRhythmPaused = useRef(false);
@@ -142,7 +145,7 @@ function App() {
   const isTransitioning = useRef(false);
   const lineStageRef = useRef(null);
   const measureRef = useRef(null);
-  const [fitFontSize, setFitFontSize] = useState(fontSize);
+  const [fitFontSize, setFitFontSize] = useState(READER_FONT_SIZE);
   const [viewportTick, setViewportTick] = useState(0);
   const lines = useMemo(() => splitTextIntoSentences(text), [text]);
   const currentIndex = clamp(index, 0, Math.max(lines.length - 1, 0));
@@ -156,9 +159,9 @@ function App() {
   useEffect(() => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ text, mode, index: currentIndex, fontSize, theme }),
+      JSON.stringify({ text, mode, index: currentIndex, theme }),
     );
-  }, [text, mode, currentIndex, fontSize, theme]);
+  }, [text, mode, currentIndex, theme]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -258,7 +261,7 @@ function App() {
 
   useLayoutEffect(() => {
     if (mode !== "read") {
-      setFitFontSize(fontSize);
+      setFitFontSize(READER_FONT_SIZE);
       return;
     }
 
@@ -282,7 +285,7 @@ function App() {
     const textsToFit = [currentLine, outgoingSentence].filter((sentence) => sentence);
 
     if (textsToFit.length === 0) {
-      setFitFontSize(fontSize);
+      setFitFontSize(READER_FONT_SIZE);
       return;
     }
 
@@ -298,7 +301,7 @@ function App() {
     }
 
     let low = MIN_READER_FONT_SIZE;
-    let high = fontSize;
+    let high = READER_FONT_SIZE;
 
     if (fits(high)) {
       setFitFontSize(high);
@@ -316,7 +319,7 @@ function App() {
     }
 
     setFitFontSize(low);
-  }, [animationId, currentLine, fontSize, mode, outgoingSentence, viewportTick]);
+  }, [animationId, currentLine, mode, outgoingSentence, viewportTick]);
 
   const move = useCallback(
     (step) => {
@@ -425,8 +428,18 @@ function App() {
     setMode("read");
   }
 
+  function clearText() {
+    setText("");
+    setIndex(0);
+    setDirection("idle");
+    setOutgoingSentence(null);
+    setActiveWordIndex(null);
+    clearWordTimers();
+  }
+
   function handleTouchStart(event) {
     touchStartY.current = event.touches[0]?.clientY ?? null;
+    touchStartAt.current = Date.now();
   }
 
   function handleTouchEnd(event) {
@@ -436,7 +449,14 @@ function App() {
 
     const endY = event.changedTouches[0]?.clientY ?? touchStartY.current;
     const distance = touchStartY.current - endY;
+    const touchDuration = Date.now() - touchStartAt.current;
     touchStartY.current = null;
+    touchStartAt.current = 0;
+
+    if (suppressTouchNavigation.current || touchDuration >= HOLD_PAUSE_MS) {
+      suppressTouchNavigation.current = false;
+      return;
+    }
 
     if (Math.abs(distance) > 48) {
       move(distance > 0 ? 1 : -1);
@@ -449,6 +469,7 @@ function App() {
     }
 
     isRhythmPaused.current = true;
+    pressStartAt.current = Date.now();
     clearWordTimers();
   }
 
@@ -457,6 +478,11 @@ function App() {
       return;
     }
 
+    if (Date.now() - pressStartAt.current >= HOLD_PAUSE_MS) {
+      suppressTouchNavigation.current = true;
+    }
+
+    pressStartAt.current = 0;
     isRhythmPaused.current = false;
 
     if (!currentLine || currentWordCount === 0 || activeWordIndexRef.current === -1) {
@@ -466,6 +492,18 @@ function App() {
     const nextWordIndex = activeWordIndexRef.current === null ? 0 : activeWordIndexRef.current + 1;
     scheduleWordRhythm(nextWordIndex, activeWordIndexRef.current === null ? 120 : WORD_INTERVAL_MS);
   }
+
+  const themeToggle = (
+    <button
+      className="theme-toggle"
+      type="button"
+      onClick={() => setTheme((value) => (value === "light" ? "dark" : "light"))}
+      aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+      title={theme === "light" ? "Dark mode" : "Light mode"}
+    >
+      <span aria-hidden="true">{theme === "light" ? "☾" : "☼"}</span>
+    </button>
+  );
 
   if (mode === "read") {
     const progress = lines.length ? ((currentIndex + 1) / lines.length) * 100 : 0;
@@ -481,6 +519,7 @@ function App() {
         onTouchEnd={handleTouchEnd}
         aria-label="Reader"
       >
+        {themeToggle}
         <div className="progress-track" aria-hidden="true">
           <div className="progress-bar" style={{ height: `${progress}%` }} />
         </div>
@@ -529,58 +568,33 @@ function App() {
 
   return (
     <main className="compose">
+      {themeToggle}
       <section className="compose-panel">
         <div className="compose-copy">
-          <p className="eyebrow">Scroll Break</p>
-          <h1>Feed the scroll. Read the text.</h1>
-          <p>
-            Paste a wall of words, then move through it one line at a time. The page changes only when your thumb asks.
-          </p>
+          <h1>
+            Read the scroll. <span className="accent-text">Scroll to read.</span>
+          </h1>
+          <p>Paste a wall of words, then move through it one line at a time.</p>
         </div>
 
-        <label className="editor-label" htmlFor="source-text">Text</label>
         <textarea
           id="source-text"
+          aria-label="Text to read"
           value={text}
           onChange={(event) => setText(event.target.value)}
-          placeholder="Paste your essay, article, notes, manifesto, apology, prophecy..."
+          placeholder="Paste your text here"
         />
-
-        <div className="settings-row">
-          <label className="range-control">
-            <span>Size</span>
-            <input
-              type="range"
-              min="26"
-              max="60"
-              value={fontSize}
-              onChange={(event) => setFontSize(Number(event.target.value))}
-            />
-          </label>
-
-          <div className="segmented-control" aria-label="Theme">
-            <button
-              className={theme === "light" ? "active" : ""}
-              type="button"
-              onClick={() => setTheme("light")}
-            >
-              Light
-            </button>
-            <button
-              className={theme === "dark" ? "active" : ""}
-              type="button"
-              onClick={() => setTheme("dark")}
-            >
-              Dark
-            </button>
-          </div>
-        </div>
 
         <div className="action-row">
           <p>{lines.length} sentences prepared</p>
-          <button className="primary-button" type="button" onClick={startReading} disabled={!canRead}>
-            Read
-          </button>
+          <div className="compose-actions">
+            <button className="secondary-button" type="button" onClick={clearText} disabled={!text}>
+              Clear
+            </button>
+            <button className="primary-button" type="button" onClick={startReading} disabled={!canRead}>
+              Read
+            </button>
+          </div>
         </div>
       </section>
     </main>
