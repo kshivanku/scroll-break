@@ -21,6 +21,7 @@ const PRELOADED_TEXTS = [
     title: "Magnifica Humanitas",
     description: "An encyclical on safeguarding the human person in the time of artificial intelligence.",
     wordCount: 37352,
+    image: new URL("../assets/LibraryImages/thumbs/encyclical-on-ai.jpg", import.meta.url).href,
     url: new URL("../assets/encyclical-on-ai.txt", import.meta.url).href,
   },
   {
@@ -28,6 +29,7 @@ const PRELOADED_TEXTS = [
     title: "The Medium is the Message",
     description: "Marshall McLuhan's essay on media, technology, and the scale of human affairs.",
     wordCount: 9116,
+    image: new URL("../assets/LibraryImages/thumbs/medium-is-message.jpg", import.meta.url).href,
     url: new URL("../assets/medium-is-message.txt", import.meta.url).href,
   },
   {
@@ -35,6 +37,7 @@ const PRELOADED_TEXTS = [
     title: "The Work of Art in the Age of Mechanical Reproduction",
     description: "Walter Benjamin on art, reproduction, aura, and the politics of media.",
     wordCount: 12686,
+    image: new URL("../assets/LibraryImages/thumbs/work-of-art.jpg", import.meta.url).href,
     url: new URL("../assets/work-of-art.txt", import.meta.url).href,
   },
   {
@@ -42,6 +45,7 @@ const PRELOADED_TEXTS = [
     title: "Do Artifacts Have Politics?",
     description: "Langdon Winner on technology, power, and political arrangements built into things.",
     wordCount: 8857,
+    image: new URL("../assets/LibraryImages/thumbs/do-artifacts-have-politics.jpg", import.meta.url).href,
     url: new URL("../assets/do-artifacts-have-politics.txt", import.meta.url).href,
   },
 ];
@@ -859,6 +863,7 @@ function App() {
               onClick={() => readPreloadedText(preloadedText)}
               disabled={loadingPreloadedId !== null}
             >
+              <img src={preloadedText.image} alt="" loading="lazy" aria-hidden="true" />
               <span>{preloadedText.title}</span>
               <em>{formatScrollDuration(preloadedText.wordCount)}</em>
               <small>
