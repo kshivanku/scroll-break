@@ -192,7 +192,9 @@ function SentenceText({ sentence, className, fontSize, characterIndex, rhythmEna
 
 function App() {
   const savedState = useMemo(loadSavedState, []);
-  const [text, setText] = useState(savedState?.text || DEFAULT_TEXT);
+  const savedEditorText = savedState?.editorText ?? (savedState?.activePreloadedId ? DEFAULT_TEXT : savedState?.text);
+  const [editorText, setEditorText] = useState(savedEditorText || DEFAULT_TEXT);
+  const [readerText, setReaderText] = useState(savedState?.readerText || savedState?.text || savedEditorText || DEFAULT_TEXT);
   const [mode, setMode] = useState(savedState?.mode || "compose");
   const [index, setIndex] = useState(savedState?.index || 0);
   const [theme, setTheme] = useState(savedState?.theme || "light");
@@ -223,8 +225,9 @@ function App() {
   const measureRef = useRef(null);
   const [fitFontSize, setFitFontSize] = useState(READER_FONT_SIZE);
   const [viewportTick, setViewportTick] = useState(0);
-  const lines = useMemo(() => splitTextIntoSentences(text), [text]);
-  const scrollDurationLabel = useMemo(() => formatScrollDuration(countWords(text)), [text]);
+  const lines = useMemo(() => splitTextIntoSentences(readerText), [readerText]);
+  const editorLines = useMemo(() => splitTextIntoSentences(editorText), [editorText]);
+  const scrollDurationLabel = useMemo(() => formatScrollDuration(countWords(editorText)), [editorText]);
   const currentIndex = clamp(index, 0, Math.max(lines.length - 1, 0));
   const currentLine = lines[currentIndex] || "";
   const currentWordCount = useMemo(
@@ -235,14 +238,23 @@ function App() {
     () => Array.from(currentLine).filter((character) => !/\s/.test(character)).length,
     [currentLine],
   );
-  const canRead = lines.length > 0;
+  const canRead = editorLines.length > 0;
 
   useEffect(() => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ text, mode, index: currentIndex, theme, activePreloadedId, preloadedProgress }),
+      JSON.stringify({
+        editorText,
+        readerText,
+        text: editorText,
+        mode,
+        index: currentIndex,
+        theme,
+        activePreloadedId,
+        preloadedProgress,
+      }),
     );
-  }, [text, mode, currentIndex, theme, activePreloadedId, preloadedProgress]);
+  }, [editorText, readerText, mode, currentIndex, theme, activePreloadedId, preloadedProgress]);
 
   useEffect(() => {
     if (!activePreloadedId) {
@@ -556,6 +568,9 @@ function App() {
       return;
     }
 
+    setReaderText(editorText);
+    setActivePreloadedId(null);
+    setIndex(0);
     setDirection("idle");
     setOutgoingSentence(null);
     setActiveCharacterIndex(null);
@@ -564,9 +579,7 @@ function App() {
   }
 
   function clearText() {
-    setText("");
-    setIndex(0);
-    setActivePreloadedId(null);
+    setEditorText("");
     setDirection("idle");
     setOutgoingSentence(null);
     setActiveCharacterIndex(null);
@@ -589,7 +602,7 @@ function App() {
 
       const loadedText = await response.text();
       const savedIndex = preloadedProgress[preloadedText.id] || 0;
-      setText(loadedText);
+      setReaderText(loadedText);
       setIndex(savedIndex);
       setActivePreloadedId(preloadedText.id);
       setDirection("idle");
@@ -833,18 +846,17 @@ function App() {
         <textarea
           id="source-text"
           aria-label="Text to read"
-          value={text}
+          value={editorText}
           onChange={(event) => {
-            setText(event.target.value);
-            setActivePreloadedId(null);
+            setEditorText(event.target.value);
           }}
           placeholder="Paste your text here, then scroll through it one line at a time."
         />
 
         <div className="action-row">
-          {text.trim() && <p>{scrollDurationLabel}</p>}
+          {editorText.trim() && <p>{scrollDurationLabel}</p>}
           <div className="compose-actions">
-            <button className="secondary-button" type="button" onClick={clearText} disabled={!text}>
+            <button className="secondary-button" type="button" onClick={clearText} disabled={!editorText}>
               Clear
             </button>
             <button className="primary-button" type="button" onClick={startReading} disabled={!canRead}>
