@@ -278,27 +278,25 @@ textarea:focus {
   will-change: opacity, transform;
 }
 
-.word {
+.character {
   position: relative;
   z-index: 1;
   font-weight: 400;
-  transition:
-    color 140ms linear,
-    opacity 260ms ease;
+  transition: opacity 220ms linear;
 }
 
-.word-past,
-.word-complete {
+.character-past,
+.character-complete {
   color: var(--text);
   opacity: 1;
 }
 
-.word-active {
+.character-active {
   color: var(--text);
   opacity: 1;
 }
 
-.word-upcoming {
+.character-upcoming {
   color: var(--text);
   opacity: 0.34;
 }

@@ -10,9 +10,10 @@ const WHEEL_GESTURE_RESET_MS = 160;
 const TRANSITION_MS = 520;
 const MIN_READER_FONT_SIZE = 8;
 const READER_FONT_SIZE = 38;
-const WORD_START_DELAY_MS = 280;
+const REVEAL_START_DELAY_MS = 280;
 const WORD_INTERVAL_MS = 285;
-const WORD_END_HOLD_MS = 360;
+const MIN_CHARACTER_INTERVAL_MS = 32;
+const REVEAL_END_HOLD_MS = 360;
 const HOLD_PAUSE_MS = 280;
 const PRELOADED_TEXTS = [
   {
@@ -121,7 +122,7 @@ function formatScrollDuration(wordCount) {
   return `${hours} ${hours === 1 ? "hour" : "hours"} ${remainingMinutes} min of scrolling`;
 }
 
-function SentenceText({ sentence, className, fontSize, wordIndex, rhythmEnabled }) {
+function SentenceText({ sentence, className, fontSize, characterIndex, rhythmEnabled }) {
   if (!sentence) {
     return (
       <p className={`${className} sentence-break`} style={{ fontSize: `${fontSize}px` }}>
@@ -130,33 +131,33 @@ function SentenceText({ sentence, className, fontSize, wordIndex, rhythmEnabled 
     );
   }
 
-  let wordCursor = -1;
-  const isComplete = rhythmEnabled && wordIndex === -1;
+  let characterCursor = -1;
+  const isComplete = rhythmEnabled && characterIndex === -1;
 
   return (
     <p className={className} style={{ fontSize: `${fontSize}px` }}>
-      {tokenizeSentence(sentence).map((token, tokenIndex) => {
-        if (!token.isWord) {
-          return token.text;
+      {Array.from(sentence).map((character, characterPosition) => {
+        if (/\s/.test(character)) {
+          return character;
         }
 
-        wordCursor += 1;
+        characterCursor += 1;
 
         const stateClass = rhythmEnabled
           ? isComplete
-            ? "word-complete"
-            : wordIndex === null
-              ? "word-upcoming"
-              : wordCursor < wordIndex
-                ? "word-past"
-                : wordCursor === wordIndex
-                  ? "word-active"
-                  : "word-upcoming"
-          : "word-complete";
+            ? "character-complete"
+            : characterIndex === null
+              ? "character-upcoming"
+              : characterCursor < characterIndex
+                ? "character-past"
+                : characterCursor === characterIndex
+                  ? "character-active"
+                  : "character-upcoming"
+          : "character-complete";
 
         return (
-          <span className={`word ${stateClass}`} key={`${token.text}-${tokenIndex}`}>
-            {token.text}
+          <span className={`character ${stateClass}`} key={`${character}-${characterPosition}`}>
+            {character}
           </span>
         );
       })}
@@ -173,16 +174,16 @@ function App() {
   const [direction, setDirection] = useState("idle");
   const [outgoingSentence, setOutgoingSentence] = useState(null);
   const [animationId, setAnimationId] = useState(0);
-  const [activeWordIndex, setActiveWordIndex] = useState(null);
+  const [activeCharacterIndex, setActiveCharacterIndex] = useState(null);
   const [loadingPreloadedId, setLoadingPreloadedId] = useState(null);
-  const activeWordIndexRef = useRef(null);
+  const activeCharacterIndexRef = useRef(null);
   const lastMoveAt = useRef(0);
   const touchStartY = useRef(null);
   const touchStartAt = useRef(0);
   const pressStartAt = useRef(0);
   const suppressTouchNavigation = useRef(false);
   const transitionTimer = useRef(null);
-  const wordTimers = useRef([]);
+  const revealTimers = useRef([]);
   const isRhythmPaused = useRef(false);
   const wheelDelta = useRef(0);
   const wheelGestureConsumed = useRef(false);
@@ -198,6 +199,10 @@ function App() {
   const currentLine = lines[currentIndex] || "";
   const currentWordCount = useMemo(
     () => tokenizeSentence(currentLine).filter((token) => token.isWord).length,
+    [currentLine],
+  );
+  const currentCharacterCount = useMemo(
+    () => Array.from(currentLine).filter((character) => !/\s/.test(character)).length,
     [currentLine],
   );
   const canRead = lines.length > 0;
@@ -249,25 +254,25 @@ function App() {
     return () => {
       window.clearTimeout(transitionTimer.current);
       window.clearTimeout(wheelResetTimer.current);
-      wordTimers.current.forEach((timer) => window.clearTimeout(timer));
+      revealTimers.current.forEach((timer) => window.clearTimeout(timer));
     };
   }, []);
 
   useEffect(() => {
-    activeWordIndexRef.current = activeWordIndex;
-  }, [activeWordIndex]);
+    activeCharacterIndexRef.current = activeCharacterIndex;
+  }, [activeCharacterIndex]);
 
-  const clearWordTimers = useCallback(() => {
-    wordTimers.current.forEach((timer) => window.clearTimeout(timer));
-    wordTimers.current = [];
+  const clearRevealTimers = useCallback(() => {
+    revealTimers.current.forEach((timer) => window.clearTimeout(timer));
+    revealTimers.current = [];
   }, []);
 
-  const scheduleWordRhythm = useCallback(
-    (startWordIndex, firstDelay) => {
-      clearWordTimers();
+  const scheduleCharacterRhythm = useCallback(
+    (startCharacterIndex, firstDelay) => {
+      clearRevealTimers();
 
-      if (mode !== "read" || !currentLine || currentWordCount === 0) {
-        setActiveWordIndex(-1);
+      if (mode !== "read" || !currentLine || currentCharacterCount === 0) {
+        setActiveCharacterIndex(-1);
         return;
       }
 
@@ -275,48 +280,53 @@ function App() {
         return;
       }
 
-      if (startWordIndex >= currentWordCount) {
+      if (startCharacterIndex >= currentCharacterCount) {
         const completeTimer = window.setTimeout(() => {
-          setActiveWordIndex(-1);
-        }, WORD_END_HOLD_MS);
+          setActiveCharacterIndex(-1);
+        }, REVEAL_END_HOLD_MS);
 
-        wordTimers.current.push(completeTimer);
+        revealTimers.current.push(completeTimer);
         return;
       }
 
-      for (let wordIndex = startWordIndex; wordIndex < currentWordCount; wordIndex += 1) {
-        const delay = firstDelay + (wordIndex - startWordIndex) * WORD_INTERVAL_MS;
+      const characterInterval = Math.max(
+        MIN_CHARACTER_INTERVAL_MS,
+        (Math.max(currentWordCount, 1) * WORD_INTERVAL_MS) / currentCharacterCount,
+      );
+
+      for (let characterIndex = startCharacterIndex; characterIndex < currentCharacterCount; characterIndex += 1) {
+        const delay = firstDelay + (characterIndex - startCharacterIndex) * characterInterval;
         const timer = window.setTimeout(() => {
-          setActiveWordIndex(wordIndex);
+          setActiveCharacterIndex(characterIndex);
         }, delay);
 
-        wordTimers.current.push(timer);
+        revealTimers.current.push(timer);
       }
 
       const completeTimer = window.setTimeout(() => {
-        setActiveWordIndex(-1);
-      }, firstDelay + (currentWordCount - startWordIndex) * WORD_INTERVAL_MS + WORD_END_HOLD_MS);
+        setActiveCharacterIndex(-1);
+      }, firstDelay + (currentCharacterCount - startCharacterIndex) * characterInterval + REVEAL_END_HOLD_MS);
 
-      wordTimers.current.push(completeTimer);
+      revealTimers.current.push(completeTimer);
     },
-    [clearWordTimers, currentLine, currentWordCount, mode],
+    [clearRevealTimers, currentCharacterCount, currentLine, currentWordCount, mode],
   );
 
   useEffect(() => {
-    clearWordTimers();
+    clearRevealTimers();
 
-    if (mode !== "read" || !currentLine || currentWordCount === 0) {
-      setActiveWordIndex(-1);
+    if (mode !== "read" || !currentLine || currentCharacterCount === 0) {
+      setActiveCharacterIndex(-1);
       return;
     }
 
-    setActiveWordIndex(null);
-    scheduleWordRhythm(0, WORD_START_DELAY_MS);
+    setActiveCharacterIndex(null);
+    scheduleCharacterRhythm(0, REVEAL_START_DELAY_MS);
 
     return () => {
-      clearWordTimers();
+      clearRevealTimers();
     };
-  }, [animationId, clearWordTimers, currentLine, currentWordCount, mode, scheduleWordRhythm]);
+  }, [animationId, clearRevealTimers, currentCharacterCount, currentLine, mode, scheduleCharacterRhythm]);
 
   useEffect(() => {
     function handleResize() {
@@ -495,7 +505,7 @@ function App() {
 
     setDirection("idle");
     setOutgoingSentence(null);
-    setActiveWordIndex(null);
+    setActiveCharacterIndex(null);
     isTransitioning.current = false;
     setMode("read");
   }
@@ -505,8 +515,8 @@ function App() {
     setIndex(0);
     setDirection("idle");
     setOutgoingSentence(null);
-    setActiveWordIndex(null);
-    clearWordTimers();
+    setActiveCharacterIndex(null);
+    clearRevealTimers();
   }
 
   async function readPreloadedText(preloadedText) {
@@ -528,8 +538,8 @@ function App() {
       setIndex(0);
       setDirection("idle");
       setOutgoingSentence(null);
-      setActiveWordIndex(null);
-      clearWordTimers();
+      setActiveCharacterIndex(null);
+      clearRevealTimers();
       isTransitioning.current = false;
       setMode("read");
     } finally {
@@ -538,20 +548,20 @@ function App() {
   }
 
   function openOverview() {
-    clearWordTimers();
+    clearRevealTimers();
     setOutgoingSentence(null);
     setDirection("idle");
-    setActiveWordIndex(null);
+    setActiveCharacterIndex(null);
     isTransitioning.current = false;
     setMode("overview");
   }
 
   function startFromSentence(sentenceIndex) {
-    clearWordTimers();
+    clearRevealTimers();
     setIndex(sentenceIndex);
     setOutgoingSentence(null);
     setDirection("idle");
-    setActiveWordIndex(null);
+    setActiveCharacterIndex(null);
     isTransitioning.current = false;
     setMode("read");
   }
@@ -589,7 +599,7 @@ function App() {
 
     isRhythmPaused.current = true;
     pressStartAt.current = Date.now();
-    clearWordTimers();
+    clearRevealTimers();
   }
 
   function resumeWordRhythm() {
@@ -604,12 +614,16 @@ function App() {
     pressStartAt.current = 0;
     isRhythmPaused.current = false;
 
-    if (!currentLine || currentWordCount === 0 || activeWordIndexRef.current === -1) {
+    if (!currentLine || currentCharacterCount === 0 || activeCharacterIndexRef.current === -1) {
       return;
     }
 
-    const nextWordIndex = activeWordIndexRef.current === null ? 0 : activeWordIndexRef.current + 1;
-    scheduleWordRhythm(nextWordIndex, activeWordIndexRef.current === null ? 120 : WORD_INTERVAL_MS);
+    const characterInterval = Math.max(
+      MIN_CHARACTER_INTERVAL_MS,
+      (Math.max(currentWordCount, 1) * WORD_INTERVAL_MS) / currentCharacterCount,
+    );
+    const nextCharacterIndex = activeCharacterIndexRef.current === null ? 0 : activeCharacterIndexRef.current + 1;
+    scheduleCharacterRhythm(nextCharacterIndex, activeCharacterIndexRef.current === null ? 120 : characterInterval);
   }
 
   const themeToggle = (
@@ -663,7 +677,7 @@ function App() {
               sentence={outgoingSentence}
               fontSize={fitFontSize}
               rhythmEnabled={false}
-              wordIndex={-1}
+              characterIndex={-1}
             />
           )}
           <SentenceText
@@ -672,7 +686,7 @@ function App() {
             sentence={currentLine}
             fontSize={fitFontSize}
             rhythmEnabled
-            wordIndex={activeWordIndex}
+            characterIndex={activeCharacterIndex}
           />
           <p ref={measureRef} className="sentence-measure" aria-hidden="true" />
         </section>
