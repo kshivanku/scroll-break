@@ -733,7 +733,7 @@ function App() {
       <section className="compose-panel">
         <div className="compose-copy">
           <h1>
-            Read the scroll. <span className="accent-text">Scroll to read.</span>
+            Take a scroll break
           </h1>
           <p>Paste a wall of words, then move through it one line at a time.</p>
         </div>
