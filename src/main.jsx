@@ -14,6 +14,15 @@ const WORD_START_DELAY_MS = 280;
 const WORD_INTERVAL_MS = 285;
 const WORD_END_HOLD_MS = 360;
 const HOLD_PAUSE_MS = 280;
+const PRELOADED_TEXTS = [
+  {
+    id: "encyclical-on-ai",
+    title: "Magnifica Humanitas",
+    description: "An encyclical on safeguarding the human person in the time of artificial intelligence.",
+    wordCount: 37352,
+    url: new URL("../assets/encyclical-on-ai.txt", import.meta.url).href,
+  },
+];
 
 function loadSavedState() {
   try {
@@ -91,6 +100,27 @@ function tokenizeSentence(sentence) {
   })) || [];
 }
 
+function countWords(text) {
+  return text.match(/\S+/g)?.length || 0;
+}
+
+function formatScrollDuration(wordCount) {
+  const minutes = Math.round((wordCount * WORD_INTERVAL_MS) / 60000);
+
+  if (minutes < 60) {
+    return `${minutes} ${minutes === 1 ? "minute" : "minutes"} of scrolling`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (remainingMinutes === 0) {
+    return `${hours} ${hours === 1 ? "hour" : "hours"} of scrolling`;
+  }
+
+  return `${hours} ${hours === 1 ? "hour" : "hours"} ${remainingMinutes} min of scrolling`;
+}
+
 function SentenceText({ sentence, className, fontSize, wordIndex, rhythmEnabled }) {
   if (!sentence) {
     return (
@@ -144,6 +174,7 @@ function App() {
   const [outgoingSentence, setOutgoingSentence] = useState(null);
   const [animationId, setAnimationId] = useState(0);
   const [activeWordIndex, setActiveWordIndex] = useState(null);
+  const [loadingPreloadedId, setLoadingPreloadedId] = useState(null);
   const activeWordIndexRef = useRef(null);
   const lastMoveAt = useRef(0);
   const touchStartY = useRef(null);
@@ -162,6 +193,7 @@ function App() {
   const [fitFontSize, setFitFontSize] = useState(READER_FONT_SIZE);
   const [viewportTick, setViewportTick] = useState(0);
   const lines = useMemo(() => splitTextIntoSentences(text), [text]);
+  const scrollDurationLabel = useMemo(() => formatScrollDuration(countWords(text)), [text]);
   const currentIndex = clamp(index, 0, Math.max(lines.length - 1, 0));
   const currentLine = lines[currentIndex] || "";
   const currentWordCount = useMemo(
@@ -477,6 +509,34 @@ function App() {
     clearWordTimers();
   }
 
+  async function readPreloadedText(preloadedText) {
+    if (loadingPreloadedId) {
+      return;
+    }
+
+    setLoadingPreloadedId(preloadedText.id);
+
+    try {
+      const response = await fetch(preloadedText.url);
+
+      if (!response.ok) {
+        throw new Error(`Unable to load ${preloadedText.title}`);
+      }
+
+      const loadedText = await response.text();
+      setText(loadedText);
+      setIndex(0);
+      setDirection("idle");
+      setOutgoingSentence(null);
+      setActiveWordIndex(null);
+      clearWordTimers();
+      isTransitioning.current = false;
+      setMode("read");
+    } finally {
+      setLoadingPreloadedId(null);
+    }
+  }
+
   function openOverview() {
     clearWordTimers();
     setOutgoingSentence(null);
@@ -687,7 +747,7 @@ function App() {
         />
 
         <div className="action-row">
-          <p>{lines.length} sentences prepared</p>
+          <p>{scrollDurationLabel}</p>
           <div className="compose-actions">
             <button className="secondary-button" type="button" onClick={clearText} disabled={!text}>
               Clear
@@ -697,6 +757,25 @@ function App() {
             </button>
           </div>
         </div>
+
+        <section className="preloaded-section" aria-label="Preloaded texts">
+          <h2>Articles</h2>
+          {PRELOADED_TEXTS.map((preloadedText) => (
+            <button
+              className="preloaded-item"
+              type="button"
+              key={preloadedText.id}
+              onClick={() => readPreloadedText(preloadedText)}
+              disabled={loadingPreloadedId !== null}
+            >
+              <span>{preloadedText.title}</span>
+              <em>{formatScrollDuration(preloadedText.wordCount)}</em>
+              <small>
+                {loadingPreloadedId === preloadedText.id ? "Loading..." : preloadedText.description}
+              </small>
+            </button>
+          ))}
+        </section>
       </section>
     </main>
   );

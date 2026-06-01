@@ -187,6 +187,65 @@ textarea:focus {
   opacity: 0.42;
 }
 
+.preloaded-section {
+  display: grid;
+  gap: 12px;
+}
+
+.preloaded-section h2 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.preloaded-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px 20px;
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.preloaded-item:hover,
+.preloaded-item:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.preloaded-item:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.preloaded-item span {
+  font-size: clamp(1.25rem, 2.2vw, 1.65rem);
+  line-height: 1.1;
+}
+
+.preloaded-item em {
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-style: normal;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.preloaded-item small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
 .reader {
   position: relative;
   width: 100vw;
@@ -490,6 +549,14 @@ textarea:focus {
   .secondary-button,
   .compose-actions {
     width: 100%;
+  }
+
+  .preloaded-item {
+    grid-template-columns: 1fr;
+  }
+
+  .preloaded-item em {
+    white-space: normal;
   }
 
   .reader {
