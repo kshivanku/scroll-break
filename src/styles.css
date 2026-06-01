@@ -536,6 +536,11 @@ textarea:focus {
 
   .compose {
     align-items: start;
+    padding-top: calc(max(18px, env(safe-area-inset-top)) + 58px);
+  }
+
+  h1 {
+    max-width: calc(100vw - 96px);
   }
 
   .action-row {
