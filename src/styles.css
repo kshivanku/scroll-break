@@ -279,14 +279,12 @@ textarea:focus {
 }
 
 .word {
-  border-radius: 3px;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
+  position: relative;
+  z-index: 1;
   font-weight: 400;
   transition:
-    background-color 140ms linear,
     color 140ms linear,
-    opacity 140ms linear;
+    opacity 260ms ease;
 }
 
 .word-past,
@@ -296,7 +294,6 @@ textarea:focus {
 }
 
 .word-active {
-  background: var(--highlight);
   color: var(--text);
   opacity: 1;
 }

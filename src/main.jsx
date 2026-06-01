@@ -758,7 +758,7 @@ function App() {
         </div>
 
         <section className="preloaded-section" aria-label="Preloaded texts">
-          <h2>Articles</h2>
+          <h2>Library</h2>
           {PRELOADED_TEXTS.map((preloadedText) => (
             <button
               className="preloaded-item"
