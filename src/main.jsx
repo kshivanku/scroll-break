@@ -23,6 +23,27 @@ const PRELOADED_TEXTS = [
     wordCount: 37352,
     url: new URL("../assets/encyclical-on-ai.txt", import.meta.url).href,
   },
+  {
+    id: "medium-is-message",
+    title: "The Medium is the Message",
+    description: "Marshall McLuhan's essay on media, technology, and the scale of human affairs.",
+    wordCount: 9116,
+    url: new URL("../assets/medium-is-message.txt", import.meta.url).href,
+  },
+  {
+    id: "work-of-art",
+    title: "The Work of Art in the Age of Mechanical Reproduction",
+    description: "Walter Benjamin on art, reproduction, aura, and the politics of media.",
+    wordCount: 12686,
+    url: new URL("../assets/work-of-art.txt", import.meta.url).href,
+  },
+  {
+    id: "do-artifacts-have-politics",
+    title: "Do Artifacts Have Politics?",
+    description: "Langdon Winner on technology, power, and political arrangements built into things.",
+    wordCount: 8857,
+    url: new URL("../assets/do-artifacts-have-politics.txt", import.meta.url).href,
+  },
 ];
 
 function loadSavedState() {
@@ -176,13 +197,18 @@ function App() {
   const [animationId, setAnimationId] = useState(0);
   const [activeCharacterIndex, setActiveCharacterIndex] = useState(null);
   const [loadingPreloadedId, setLoadingPreloadedId] = useState(null);
+  const [activePreloadedId, setActivePreloadedId] = useState(savedState?.activePreloadedId || null);
+  const [preloadedProgress, setPreloadedProgress] = useState(savedState?.preloadedProgress || {});
   const activeCharacterIndexRef = useRef(null);
   const lastMoveAt = useRef(0);
   const touchStartY = useRef(null);
   const touchStartAt = useRef(0);
   const pressStartAt = useRef(0);
   const suppressTouchNavigation = useRef(false);
+  const suppressNextTapClick = useRef(false);
   const transitionTimer = useRef(null);
+  const holdPauseTimer = useRef(null);
+  const tapSuppressTimer = useRef(null);
   const revealTimers = useRef([]);
   const isRhythmPaused = useRef(false);
   const wheelDelta = useRef(0);
@@ -210,9 +236,26 @@ function App() {
   useEffect(() => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ text, mode, index: currentIndex, theme }),
+      JSON.stringify({ text, mode, index: currentIndex, theme, activePreloadedId, preloadedProgress }),
     );
-  }, [text, mode, currentIndex, theme]);
+  }, [text, mode, currentIndex, theme, activePreloadedId, preloadedProgress]);
+
+  useEffect(() => {
+    if (!activePreloadedId) {
+      return;
+    }
+
+    setPreloadedProgress((progress) => {
+      if (progress[activePreloadedId] === currentIndex) {
+        return progress;
+      }
+
+      return {
+        ...progress,
+        [activePreloadedId]: currentIndex,
+      };
+    });
+  }, [activePreloadedId, currentIndex]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -254,6 +297,8 @@ function App() {
     return () => {
       window.clearTimeout(transitionTimer.current);
       window.clearTimeout(wheelResetTimer.current);
+      window.clearTimeout(holdPauseTimer.current);
+      window.clearTimeout(tapSuppressTimer.current);
       revealTimers.current.forEach((timer) => window.clearTimeout(timer));
     };
   }, []);
@@ -335,9 +380,13 @@ function App() {
 
     window.addEventListener("resize", handleResize);
     window.addEventListener("orientationchange", handleResize);
+    window.visualViewport?.addEventListener("resize", handleResize);
+    window.visualViewport?.addEventListener("scroll", handleResize);
     return () => {
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("orientationchange", handleResize);
+      window.visualViewport?.removeEventListener("resize", handleResize);
+      window.visualViewport?.removeEventListener("scroll", handleResize);
     };
   }, []);
 
@@ -513,6 +562,7 @@ function App() {
   function clearText() {
     setText("");
     setIndex(0);
+    setActivePreloadedId(null);
     setDirection("idle");
     setOutgoingSentence(null);
     setActiveCharacterIndex(null);
@@ -534,8 +584,10 @@ function App() {
       }
 
       const loadedText = await response.text();
+      const savedIndex = preloadedProgress[preloadedText.id] || 0;
       setText(loadedText);
-      setIndex(0);
+      setIndex(savedIndex);
+      setActivePreloadedId(preloadedText.id);
       setDirection("idle");
       setOutgoingSentence(null);
       setActiveCharacterIndex(null);
@@ -599,6 +651,11 @@ function App() {
 
     isRhythmPaused.current = true;
     pressStartAt.current = Date.now();
+    window.clearTimeout(holdPauseTimer.current);
+    holdPauseTimer.current = window.setTimeout(() => {
+      suppressTouchNavigation.current = true;
+      suppressNextTapClick.current = true;
+    }, HOLD_PAUSE_MS);
     clearRevealTimers();
   }
 
@@ -607,8 +664,15 @@ function App() {
       return;
     }
 
+    window.clearTimeout(holdPauseTimer.current);
+
     if (Date.now() - pressStartAt.current >= HOLD_PAUSE_MS) {
       suppressTouchNavigation.current = true;
+      suppressNextTapClick.current = true;
+      window.clearTimeout(tapSuppressTimer.current);
+      tapSuppressTimer.current = window.setTimeout(() => {
+        suppressNextTapClick.current = false;
+      }, 450);
     }
 
     pressStartAt.current = 0;
@@ -624,6 +688,17 @@ function App() {
     );
     const nextCharacterIndex = activeCharacterIndexRef.current === null ? 0 : activeCharacterIndexRef.current + 1;
     scheduleCharacterRhythm(nextCharacterIndex, activeCharacterIndexRef.current === null ? 120 : characterInterval);
+  }
+
+  function handleTapNavigation(step, event) {
+    if (suppressNextTapClick.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressNextTapClick.current = false;
+      return;
+    }
+
+    move(step);
   }
 
   const themeToggle = (
@@ -696,8 +771,8 @@ function App() {
           <span>{currentLine ? `${currentLine.length} chars` : "paragraph break"}</span>
         </div>
 
-        <button className="tap-zone tap-prev" type="button" onClick={() => move(-1)} aria-label="Previous line" />
-        <button className="tap-zone tap-next" type="button" onClick={() => move(1)} aria-label="Next line" />
+        <button className="tap-zone tap-prev" type="button" onClick={(event) => handleTapNavigation(-1, event)} aria-label="Previous line" />
+        <button className="tap-zone tap-next" type="button" onClick={(event) => handleTapNavigation(1, event)} aria-label="Next line" />
       </main>
     );
   }
@@ -755,7 +830,10 @@ function App() {
           id="source-text"
           aria-label="Text to read"
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => {
+            setText(event.target.value);
+            setActivePreloadedId(null);
+          }}
           placeholder="Paste your text here, then scroll through it one line at a time."
         />
 

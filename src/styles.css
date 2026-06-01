@@ -57,14 +57,19 @@ button {
 }
 
 .compose {
-  min-height: 100vh;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
   padding: clamp(18px, 4vw, 48px);
   display: grid;
-  place-items: center;
+  align-items: start;
+  justify-items: center;
 }
 
 .compose-panel {
   width: min(100%, 920px);
+  margin-block: auto;
   display: grid;
   gap: clamp(23px, 2.8vw, 36px);
 }
@@ -251,6 +256,7 @@ textarea:focus {
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--background);
   touch-action: none;
@@ -435,6 +441,7 @@ textarea:focus {
 .overview {
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
   background: var(--background);
   color: var(--text);
@@ -535,6 +542,7 @@ textarea:focus {
   .compose {
     align-items: start;
     padding-top: calc(max(18px, env(safe-area-inset-top)) + 58px);
+    padding-bottom: calc(28px + env(safe-area-inset-bottom));
   }
 
   h1 {
@@ -563,9 +571,10 @@ textarea:focus {
   .reader {
     position: fixed;
     inset: 0;
+    height: 100dvh;
   }
 
   .line-stage {
-    padding: 74px 24px 72px;
+    padding: 74px 24px calc(96px + env(safe-area-inset-bottom));
   }
 }
